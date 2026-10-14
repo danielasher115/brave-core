@@ -1,0 +1,12 @@
+diff --git a/third_party/blink/renderer/core/frame/web_frame_widget_impl.h b/third_party/blink/renderer/core/frame/web_frame_widget_impl.h
+index abb1bf2fcb50ff91fd74d52f04e840580debc43f..5cda278aec7f3bd626a1b5478c0e3376664591fc 100644
+--- a/third_party/blink/renderer/core/frame/web_frame_widget_impl.h
++++ b/third_party/blink/renderer/core/frame/web_frame_widget_impl.h
+@@ -426,6 +426,7 @@ class CORE_EXPORT WebFrameWidgetImpl
+   void ReleaseMouseLockAndPointerCaptureForTesting() override;
+   const viz::FrameSinkId& GetFrameSinkId() override;
+   WebHitTestResult HitTestResultAt(const gfx::PointF&) override;
++  WebHitTestResult HitTestResultForContextMenuAt(const gfx::PointF&) override;
+   void SetZoomLevelForTesting(double zoom_level) override;
+   void ResetZoomLevelForTesting() override;
+   void SetDeviceScaleFactorForTesting(float factor) override;
