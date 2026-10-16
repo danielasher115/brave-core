@@ -1,0 +1,13 @@
+diff --git a/components/client_update_protocol/cup.cc b/components/client_update_protocol/cup.cc
+index 7c005601e5b6c28bfe38a57a6214382f2b04fa87..3a2ea563ebe0f800ba175e77499a46b1aa3efd1a 100644
+--- a/components/client_update_protocol/cup.cc
++++ b/components/client_update_protocol/cup.cc
+@@ -42,7 +42,7 @@ crypto::keypair::PublicKey GetPublicKeyFromSPKI(
+   std::optional<crypto::keypair::PublicKey> public_key =
+       crypto::keypair::PublicKey::FromSubjectPublicKeyInfo(spki);
+   CHECK(public_key);
+-  CHECK(public_key->IsMldsa44());
++  // CHECK(public_key->IsMldsa44());
+   return *std::move(public_key);
+ }
+ 
