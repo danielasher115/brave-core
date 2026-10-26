@@ -645,6 +645,7 @@ export const DAppSupportedCoinTypes = [
   BraveWallet.CoinType.SOL,
   BraveWallet.CoinType.ETH,
   BraveWallet.CoinType.ADA,
+  BraveWallet.CoinType.DOT,
 ]
 
 export const CustomAssetSupportedCoinTypes = [
