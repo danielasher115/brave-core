@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/test/run_until.h"
+#include "base/test/scoped_feature_list.h"
 #include "brave/browser/ui/tabs/brave_tab_prefs.h"
 #include "brave/browser/ui/tabs/brave_tab_strip_model.h"
 #include "brave/browser/ui/tabs/public/switches.h"
@@ -16,6 +18,9 @@
 #include "brave/components/tabs/public/tree_tab_node.h"
 #include "brave/components/tabs/public/tree_tab_node_tab_collection.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tabs/features.h"
+#include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
@@ -36,8 +41,10 @@
 #include "ui/events/event.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/animation/animation_test_api.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_utils.h"
+#include "ui/views/view_utils.h"
 
 // Tests for tree tabs on top of Chromium's vertical tab strip.
 class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
@@ -51,8 +58,6 @@ class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
-    scoped_animation_ = gfx::AnimationTestApi::SetRichAnimationRenderMode(
-        gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
 
     auto* state_controller =
         tabs::VerticalTabStripStateController::From(browser());
@@ -127,8 +132,11 @@ class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
     return true;
   }
 
-  void WaitForViewModelSynced() {
-    ASSERT_TRUE(base::test::RunUntil([&]() { return IsViewModelSynced(); }));
+  void WaitForViewModelSynced(
+      base::Location location = base::Location::Current()) {
+    SCOPED_TRACE(location.ToString());
+    ASSERT_TRUE(base::test::RunUntil([&]() { return IsViewModelSynced(); }))
+        << "The view model doesn't mirror the tab collection hierarchy.";
     LayoutNow();
   }
 
@@ -143,7 +151,10 @@ class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
   const tabs::TreeTabNode& GetTreeTabNodeAt(int index) {
     auto* collection = tabs::TreeTabNodeTabCollection::GetTreeTabNodeCollection(
         model().GetTabAtIndex(index));
-    CHECK(collection);
+    if (!collection) {
+      ADD_FAILURE() << "Tab " << index << " isn't wrapped by a tree tab node.";
+      return tabs::TreeTabNode::GetEmptyTreeTabNode();
+    }
     return collection->node();
   }
 
@@ -152,7 +163,8 @@ class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
   //   - Tab 1
   //     - Tab 2
   // - Tab 3
-  void CreateTree() {
+  void CreateTree(base::Location location = base::Location::Current()) {
+    SCOPED_TRACE(location.ToString());
     ASSERT_EQ(1, model().count());
     model().ActivateTabAt(0);
     AddChildOfActiveTab();
@@ -166,8 +178,10 @@ class UpstreamTreeTabsBrowserTest : public InProcessBrowserTest {
   }
 
  private:
-  std::unique_ptr<base::AutoReset<gfx::Animation::RichAnimationRenderMode>>
-      scoped_animation_;
+  base::test::ScopedFeatureList feature_list_{tabs::kBraveTreeTab};
+  gfx::AnimationTestApi::RenderModeResetter disable_animation_ =
+      gfx::AnimationTestApi::SetRichAnimationRenderMode(
+          gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
 };
 
 IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest,
@@ -184,6 +198,14 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest,
   browser()->GetProfile()->GetPrefs()->SetBoolean(prefs::kVerticalTabsEnabled,
                                                   true);
   EXPECT_TRUE(model().tree_model());
+
+  // Toggling Brave's vertical tabs pref while upstream's is on keeps the tree.
+  browser()->GetProfile()->GetPrefs()->SetBoolean(
+      brave_tabs::kVerticalTabsEnabled, true);
+  EXPECT_TRUE(model().tree_model());
+  browser()->GetProfile()->GetPrefs()->SetBoolean(
+      brave_tabs::kVerticalTabsEnabled, false);
+  EXPECT_TRUE(model().tree_model());
 }
 
 IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, IndentedByLevel) {
@@ -192,6 +214,7 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, IndentedByLevel) {
   // Tree tab node collections aren't mirrored, so all tabs are direct
   // children of the unpinned container.
   for (int i = 0; i < model().count(); ++i) {
+    SCOPED_TRACE(testing::Message() << "tab index: " << i);
     TabView* tab_view = GetTabViewAt(i);
     ASSERT_TRUE(tab_view);
     EXPECT_EQ(region_view()->GetUnpinnedTabsContainer(), tab_view->parent());
@@ -227,7 +250,7 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, CollapseAndExpand) {
   model().SetTreeTabNodeCollapsed(GetTreeTabNodeAt(0).id(), false);
   WaitForViewModelSynced();
   for (int i = 0; i < model().count(); ++i) {
-    EXPECT_TRUE(GetTabViewAt(i)->GetVisible());
+    EXPECT_TRUE(GetTabViewAt(i)->GetVisible()) << "tab index: " << i;
   }
 }
 
@@ -248,6 +271,9 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, ToggleButton) {
       GetTabViewAt(0)->tree_toggle_button_for_testing();
   ASSERT_TRUE(button);
   EXPECT_TRUE(button->GetVisible());
+  EXPECT_EQ(u"Collapse tab tree", button->GetTooltipText());
+  EXPECT_EQ(u"Collapse tab tree",
+            button->GetViewAccessibility().GetCachedName());
 
   // The toggle button takes the close button's place.
   views::test::ButtonTestApi(button).NotifyClick(
@@ -257,6 +283,7 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, ToggleButton) {
   EXPECT_TRUE(GetTreeTabNodeAt(0).collapsed());
   WaitForViewModelSynced();
   EXPECT_FALSE(GetTabViewAt(1)->GetVisible());
+  EXPECT_EQ(u"Expand tab tree", button->GetTooltipText());
 
   // The toggle button stays visible while collapsed, even for an inactive
   // tab.
@@ -279,9 +306,11 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest,
   model().SetTreeTabNodeCollapsed(GetTreeTabNodeAt(0).id(), true);
   WaitForViewModelSynced();
 
+  // Expanded asynchronously, not in the middle of the model's notifications.
   model().ActivateTabAt(2);
-  EXPECT_FALSE(GetTreeTabNodeAt(0).collapsed());
-  EXPECT_FALSE(GetTreeTabNodeAt(1).collapsed());
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return !GetTreeTabNodeAt(0).collapsed() && !GetTreeTabNodeAt(1).collapsed();
+  }));
   WaitForViewModelSynced();
   EXPECT_TRUE(GetTabViewAt(2)->GetVisible());
 }
@@ -293,7 +322,7 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, FlattenAndRebuild) {
   ASSERT_FALSE(model().tree_model());
   WaitForViewModelSynced();
   for (int i = 1; i < model().count(); ++i) {
-    EXPECT_EQ(GetTabViewAt(0)->x(), GetTabViewAt(i)->x());
+    EXPECT_EQ(GetTabViewAt(0)->x(), GetTabViewAt(i)->x()) << "tab index: " << i;
   }
 
   // Normal operations work after flattening.
@@ -363,12 +392,30 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest,
   EXPECT_TRUE(model().IsTabSelected(0));
   EXPECT_FALSE(model().IsTabSelected(1));
   EXPECT_FALSE(model().IsTabSelected(2));
+
+  // A modified click edits the selection as usual.
+  model().ActivateTabAt(3);
+  static_cast<views::View*>(tab_view)->OnMousePressed(ui::MouseEvent(
+      ui::EventType::kMousePressed, point, point, base::TimeTicks::Now(),
+      ui::EF_LEFT_MOUSE_BUTTON | ui::EF_PLATFORM_ACCELERATOR,
+      ui::EF_LEFT_MOUSE_BUTTON));
+  static_cast<views::View*>(tab_view)->OnMouseReleased(ui::MouseEvent(
+      ui::EventType::kMouseReleased, point, point, base::TimeTicks::Now(),
+      ui::EF_LEFT_MOUSE_BUTTON | ui::EF_PLATFORM_ACCELERATOR,
+      ui::EF_LEFT_MOUSE_BUTTON));
+  EXPECT_TRUE(model().IsTabSelected(0));
+  EXPECT_FALSE(model().IsTabSelected(1));
+  EXPECT_FALSE(model().IsTabSelected(2));
 }
 
 // Moving the selected subtree, as dragging does, keeps it nested and the view
 // model in sync.
 IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, MoveSelectedSubtree) {
   CreateTree();
+  std::vector<tabs::TabInterface*> tabs;
+  for (int i = 0; i < model().count(); ++i) {
+    tabs.push_back(model().GetTabAtIndex(i));
+  }
   model().ActivateTabAt(1);
   model().SelectTabAt(2);
   ASSERT_TRUE(model().IsTabSelected(1));
@@ -377,6 +424,45 @@ IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, MoveSelectedSubtree) {
   // Move tab 1 and 2 to the end.
   model().MoveSelectedTabsTo(2, std::nullopt);
   WaitForViewModelSynced();
+  EXPECT_EQ(tabs[0], model().GetTabAtIndex(0));
+  EXPECT_EQ(tabs[3], model().GetTabAtIndex(1));
+  EXPECT_EQ(tabs[1], model().GetTabAtIndex(2));
+  EXPECT_EQ(tabs[2], model().GetTabAtIndex(3));
   EXPECT_EQ(GetTreeTabNodeAt(2).level() + 1, GetTreeTabNodeAt(3).level());
   EXPECT_LT(GetTabViewAt(2)->x(), GetTabViewAt(3)->x());
+}
+
+namespace {
+
+// Returns true if every unpinned tab is wrapped by a tree tab node.
+bool AreUnpinnedTabsInTree(TabStripModel* model) {
+  for (int i = model->IndexOfFirstNonPinnedTab(); i < model->count(); ++i) {
+    if (!tabs::TreeTabNodeTabCollection::GetNearestTreeTabNodeCollection(
+            model->GetTabAtIndex(i))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+// Detaching a split in a group, as dragging it out of the window does.
+IN_PROC_BROWSER_TEST_F(UpstreamTreeTabsBrowserTest, DetachSplitInGroup) {
+  CreateTree();
+  AddTabWithoutOpener();
+  AddTabWithoutOpener();
+  ASSERT_EQ(6, model().count());
+  model().ActivateTabAt(4);
+  model().AddToNewSplit({5}, {},
+                        split_tabs::SplitTabCreatedSource::kTabContextMenu);
+  ASSERT_TRUE(model().GetTabAtIndex(4)->IsSplit());
+  model().AddToNewGroup({3, 4, 5});
+  ASSERT_TRUE(model().GetTabAtIndex(4)->GetGroup());
+  ASSERT_TRUE(model().GetTabAtIndex(4)->IsSplit());
+  EXPECT_TRUE(AreUnpinnedTabsInTree(&model()));
+
+  auto detached = model().DetachTabsAndCollectionsForInsertion({4, 5});
+  EXPECT_EQ(1u, detached.size());
+  EXPECT_TRUE(AreUnpinnedTabsInTree(&model()));
 }

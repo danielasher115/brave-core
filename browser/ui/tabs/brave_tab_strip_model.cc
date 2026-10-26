@@ -208,8 +208,15 @@ void BraveTabStripModel::CloseTabs(base::span<int> indices,
 }
 
 void BraveTabStripModel::OnTreeTabRelatedPrefChanged() {
-  if (*tree_tabs_enabled_ &&
-      (*vertical_tabs_enabled_ || *upstream_vertical_tabs_enabled_)) {
+  const bool should_build_tree_tabs =
+      *tree_tabs_enabled_ &&
+      (*vertical_tabs_enabled_ || *upstream_vertical_tabs_enabled_);
+  // Either vertical tabs pref can change without changing the result.
+  if (should_build_tree_tabs == !!tree_tab_model_) {
+    return;
+  }
+
+  if (should_build_tree_tabs) {
     BuildTreeTabs();
   } else {
     FlattenTreeTabs();

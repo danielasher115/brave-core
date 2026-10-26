@@ -63,6 +63,7 @@ source_set("browser_tests") {
     "//brave/browser/ui/tabs:tree_tab",
     "//brave/browser/ui/views/frame",
     "//brave/browser/ui/views/sidebar",
+    "//brave/browser/ui/views/tabs:tree_tab_view_utils",
     "//brave/components/sidebar/browser",
     "//brave/components/tabs",
     "//cc/paint",

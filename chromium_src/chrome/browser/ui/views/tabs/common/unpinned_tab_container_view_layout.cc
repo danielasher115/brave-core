@@ -5,24 +5,28 @@
 
 #include "chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.h"
 
-#include "brave/browser/ui/views/tabs/tree_tab_view_utils.h"
+namespace views {
+class View;
+}  // namespace views
 
-// Indent tree tabs by their level. Only when the tab strip is expanded, as
-// there's no room for indentation when collapsed.
-#define BRAVE_UNPINNED_TAB_CONTAINER_VIEW_LAYOUT_CALCULATE_VERTICAL_LAYOUT \
-  if (collapse_state == tabs::VerticalTabStripCollapseState::kExpanded &&  \
-      size_bounds.width().is_bounded()) {                                  \
-    x += tree_tab_view_utils::GetTreeTabIndent(                            \
-        child, size_bounds.width().value() - x - horizontal_padding);      \
-  }
-
-// Hide tree tabs whose ancestor is collapsed.
-#define BRAVE_UNPINNED_TAB_CONTAINER_VIEW_LAYOUT_IS_CHILD_VISIBLE_IN_CONTAINER \
-  if (tree_tab_view_utils::IsInCollapsedTreeTabNode(child)) {                  \
-    return false;                                                              \
-  }
+// Tree tab hooks. Defined in brave/browser/ui/views/tabs/tree_tab_view_utils.cc
+// so that this upstream target doesn't depend on Brave targets.
+namespace tree_tab_view_utils {
+int GetTreeTabIndent(const views::View* view, int available_width);
+bool IsInCollapsedTreeTabNode(const views::View* view);
+}  // namespace tree_tab_view_utils
 
 #include <chrome/browser/ui/views/tabs/common/unpinned_tab_container_view_layout.cc>
 
-#undef BRAVE_UNPINNED_TAB_CONTAINER_VIEW_LAYOUT_IS_CHILD_VISIBLE_IN_CONTAINER
-#undef BRAVE_UNPINNED_TAB_CONTAINER_VIEW_LAYOUT_CALCULATE_VERTICAL_LAYOUT
+// Used by the plaster on unpinned_tab_container_view_layout.cc to indent tree
+// tabs and to hide the descendants of collapsed tree tab nodes.
+int UnpinnedTabContainerViewLayout::GetTreeTabIndent(
+    const views::View* child,
+    int available_width) const {
+  return tree_tab_view_utils::GetTreeTabIndent(child, available_width);
+}
+
+bool UnpinnedTabContainerViewLayout::IsInCollapsedTreeTabNode(
+    const views::View* child) const {
+  return tree_tab_view_utils::IsInCollapsedTreeTabNode(child);
+}

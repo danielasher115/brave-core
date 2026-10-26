@@ -9,37 +9,23 @@
 #include <vector>
 
 #include "base/functional/bind.h"
-#include "base/stl_util.h"
 #include "base/task/sequenced_task_runner.h"
-#include "brave/browser/ui/tabs/brave_tab_strip_model.h"
-#include "brave/browser/ui/views/tabs/tree_tab_view_utils.h"
-#include "brave/components/tabs/public/tree_tab_node.h"
-#include "chrome/browser/ui/tabs/tab_group_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/views/tabs/common/tab_collection_node.h"
-#include "chrome/browser/ui/views/tabs/common/tab_group_view.h"
-#include "chrome/browser/ui/views/tabs/common/tab_strip_collection_controller.h"
 #include "chrome/browser/ui/views/tabs/common/tab_view.h"
-#include "components/tab_groups/tab_group_id.h"
-#include "components/tabs/public/split_tab_data.h"
 #include "components/tabs/public/tab_collection.h"
 #include "components/tabs/public/tab_collection_types.h"
-#include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
-#include "content/public/browser/navigation_controller.h"
+#include "ui/views/view_utils.h"
 
-#define OnChildrenAdded OnChildrenAdded_ChromiumImpl
-#define OnChildrenRemoved OnChildrenRemoved_ChromiumImpl
-#define OnChildMoved OnChildMoved_ChromiumImpl
-#define OnTabStripModelChanged OnTabStripModelChanged_ChromiumImpl
+// Tree tab hooks. Defined in brave/browser/ui/views/tabs/tree_tab_view_utils.cc
+// so that this upstream target doesn't depend on Brave targets.
+namespace tree_tab_view_utils {
+tabs::ConstChildrenPtrs GetChildrenForView(
+    const tabs::TabCollection& collection);
+bool HasTreeTabNodeChild(const tabs::TabCollection& collection);
+void ExpandCollapsedTreeTabAncestors(const tabs::TabInterface* tab);
+}  // namespace tree_tab_view_utils
 
 #include <chrome/browser/ui/views/tabs/common/root_tab_collection_node.cc>
-
-#undef OnTabStripModelChanged
-#undef OnChildMoved
-#undef OnChildrenRemoved
-#undef OnChildrenAdded
 
 namespace {
 
@@ -67,57 +53,6 @@ const tabs::TabCollection* GetUnpinnedCollection(
 }
 
 }  // namespace
-
-void RootTabCollectionNode::OnChildrenAdded(
-    const tabs::TabCollection::Position& position,
-    const tabs::TabCollectionNodes& handles,
-    bool insert_from_detached) {
-  if (ShouldSyncWithTreeTabs({position.parent_handle})) {
-    SyncWithTreeTabs();
-    return;
-  }
-  OnChildrenAdded_ChromiumImpl(position, handles, insert_from_detached);
-}
-
-void RootTabCollectionNode::OnChildrenRemoved(
-    const tabs::TabCollection::Position& position,
-    const tabs::TabCollectionNodes& handles) {
-  if (ShouldSyncWithTreeTabs({position.parent_handle})) {
-    SyncWithTreeTabs();
-    return;
-  }
-  OnChildrenRemoved_ChromiumImpl(position, handles);
-}
-
-void RootTabCollectionNode::OnChildMoved(
-    const tabs::TabCollection::Position& to_position,
-    const NodeData& node_data) {
-  if (ShouldSyncWithTreeTabs(
-          {to_position.parent_handle, node_data.position.parent_handle})) {
-    SyncWithTreeTabs();
-    return;
-  }
-  OnChildMoved_ChromiumImpl(to_position, node_data);
-}
-
-void RootTabCollectionNode::OnTabStripModelChanged(
-    TabStripModel* tab_strip_model,
-    const TabStripModelChange& change,
-    const TabStripSelectionChange& selection) {
-  // The tree tab delegate could have restructured the hierarchy without
-  // sending any collection notification.
-  if (ShouldSyncWithTreeTabs({})) {
-    SyncWithTreeTabs();
-  }
-  OnTabStripModelChanged_ChromiumImpl(tab_strip_model, change, selection);
-
-  // Make sure the active tab is visible. Other selected tabs could be in a
-  // collapsed tree, e.g. descendants selected together with their collapsed
-  // parent for dragging.
-  if (selection.active_tab_changed() && !tab_strip_model->closing_all()) {
-    ExpandCollapsedTreeTabAncestors(selection.new_tab);
-  }
-}
 
 void RootTabCollectionNode::OnTreeTabChanged(const TreeTabChange& change) {
   // Tree tab changes are notified in the middle of collection updates, so the
@@ -201,9 +136,7 @@ void RootTabCollectionNode::SyncWithTreeTabs() {
   }
 
   // e.g. A new active tab could be added under a collapsed tree tab node.
-  if (!tab_strip_model_->closing_all()) {
-    ExpandCollapsedTreeTabAncestors(tab_strip_model_->GetActiveTab());
-  }
+  ScheduleExpandActiveTabTreeAncestors();
 }
 
 void RootTabCollectionNode::SyncChildrenWithTreeTabs(
@@ -242,9 +175,15 @@ void RootTabCollectionNode::SyncChildrenWithTreeTabs(
                                       /*perform_deinitialization=*/false);
           result.removed = true;
         }
-        // Children are synced below so that existing child views are reused.
-        node->AddNewChild(GetPassKey(), desired[i], i,
-                          /*perform_initialization=*/false);
+        // Build the whole subtree before attaching it, as Chromium does for
+        // detached collections, so that views observing the widget (e.g. the
+        // window title looking up the active tab) never see a partially built
+        // subtree. When the subtree contains views that already exist, e.g.
+        // existing tabs moved into a new group, its children are synced below
+        // so that those views are reused.
+        node->AddNewChild(
+            GetPassKey(), desired[i], i,
+            /*perform_initialization=*/!HasExistingDescendant(desired[i]));
         result.added.push_back(handle);
       }
     }
@@ -286,30 +225,39 @@ bool RootTabCollectionNode::IsInPinnedContainer(const TabCollectionNode* node) {
   return pinned && pinned->GetNodeForHandle(node->GetHandle());
 }
 
-void RootTabCollectionNode::ExpandCollapsedTreeTabAncestors(
-    const tabs::TabInterface* tab) {
-  if (!tab) {
+void RootTabCollectionNode::ScheduleExpandActiveTabTreeAncestors() {
+  // Expanding notifies the tab strip model's observers, so don't do it in the
+  // middle of the model's notifications.
+  if (expand_active_tab_tree_ancestors_pending_) {
     return;
   }
+  expand_active_tab_tree_ancestors_pending_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](base::WeakPtr<RootTabCollectionNode> self) {
+                       if (!self) {
+                         return;
+                       }
+                       self->expand_active_tab_tree_ancestors_pending_ = false;
+                       if (!self->tab_strip_model_->closing_all()) {
+                         tree_tab_view_utils::ExpandCollapsedTreeTabAncestors(
+                             self->tab_strip_model_->GetActiveTab());
+                       }
+                     },
+                     weak_ptr_factory_.GetWeakPtr()));
+}
 
-  // |tab| could be in a split or a group wrapped by a tree tab node.
-  const tabs::TreeTabNode* node =
-      tree_tab_view_utils::GetTreeTabNode(tabs::ConstChildPtr(tab));
-  for (const tabs::TabCollection* parent = tab->GetParentCollection();
-       parent && !node; parent = parent->GetParentCollection()) {
-    node = tree_tab_view_utils::GetTreeTabNode(tabs::ConstChildPtr(parent));
+bool RootTabCollectionNode::HasExistingDescendant(
+    const tabs::ConstChildPtr& node_data) {
+  const auto* collection =
+      std::get_if<tabs::ConstDanglingUntriagedTabCollection>(&node_data);
+  if (!collection) {
+    return false;
   }
-  if (!node) {
-    return;
-  }
-
-  // Tree tab nodes only exist with BraveTabStripModel.
-  auto* model = static_cast<BraveTabStripModel*>(tab_strip_model_.get());
-  while (auto collapsed_ancestor = node->GetClosestCollapsedAncestorId()) {
-    model->SetTreeTabNodeCollapsed(*collapsed_ancestor, false);
-    if (node->GetClosestCollapsedAncestorId() == collapsed_ancestor) {
-      // Failed to expand.
-      return;
+  for (const tabs::TabInterface* tab : **collection) {
+    if (GetNodeForHandle(tab->GetHandle())) {
+      return true;
     }
   }
+  return false;
 }
