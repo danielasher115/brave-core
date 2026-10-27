@@ -61,7 +61,7 @@ class SidebarController : public SidebarService::Observer,
   // |disposition| is only used for shortcut type items.
   void OnItemPressed(
       size_t index,
-      WindowOpenDisposition disposition = WindowOpenDisposition::CURRENT_TAB);
+      WindowOpenDisposition disposition = WindowOpenDisposition::kCurrentTab);
   void AddItemWithCurrentTab();
 
   // Called by BraveSidePanelCoordinator when a side panel entry is shown or
