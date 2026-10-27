@@ -1,8 +1,8 @@
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index d1f00fb02a47e3c8b51028b2d820983eb2d306b2..4e39fe781cac562f062be3ebcfc3ef7c946b26c3 100644
+index 7b568f6de760af21d6e9d2aa44415a7cef617c51..3814aafd6ea81d6e31f9187a39cac07bf1d6bae1 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
-@@ -654,6 +654,7 @@ bool ConvertedHitTest(views::View* src, views::View* dst, gfx::Point* point) {
+@@ -655,6 +655,7 @@ bool ConvertedHitTest(views::View* src, views::View* dst, gfx::Point* point) {
    CHECK(src, base::NotFatalUntil::M162);
    CHECK(dst, base::NotFatalUntil::M162);
    CHECK(point, base::NotFatalUntil::M162);
@@ -10,7 +10,7 @@ index d1f00fb02a47e3c8b51028b2d820983eb2d306b2..4e39fe781cac562f062be3ebcfc3ef7c
    views::View::ConvertPointToTarget(src, dst, point);
    return dst->HitTestPoint(*point);
  }
-@@ -2029,6 +2030,7 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
+@@ -2030,6 +2031,7 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
  #else
    will_restore_focus &= GetWidget()->IsActive();
  #endif
