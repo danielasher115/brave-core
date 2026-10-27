@@ -1,0 +1,15 @@
+# Copyright (c) 2026 The Brave Authors. All rights reserved.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at https://mozilla.org/MPL/2.0/.
+
+substitutions:
+  - description: |-
+      Count the secure DNS tasks of each completed job for Brave's DoH metric.
+
+      The hook, defined in the chromium_src override of this file, feeds
+      SecureDnsCounter, which browser/misc_metrics/doh_metrics.cc reads.
+    add_after_line:
+      line: 'RecordJobHistograms(results, task_type);'
+      code: |2-
+          BRAVE_RECORD_DNS_COUNTS
