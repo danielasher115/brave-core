@@ -8,7 +8,8 @@ module network.mojom;
 // How a network context treats Tor and .onion hostnames. Mirrors
 // net::URLRequestContext::TorMode. This describes the context only; it is
 // unrelated to the policy that disables Brave's Tor windows, which leaves a
-// context's TorMode as it is.
+// context's TorMode as it is. Builds without Tor ignore it and never block
+// .onion.
 [BraveAdd]
 enum TorMode {
   // The context belongs to a Tor profile. .onion requests go through the Tor
