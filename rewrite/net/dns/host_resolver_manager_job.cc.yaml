@@ -13,3 +13,14 @@ substitutions:
       line: 'RecordJobHistograms(results, task_type);'
       code: |2-
           BRAVE_RECORD_DNS_COUNTS
+
+  - description: |-
+      Keep blocked .onion lookups away from the system resolver and DoH.
+
+      ResolveLocally() keeps new blocked lookups from creating a job. Tasks
+      queued before the request context's TorMode changed, and bootstrap
+      follow-ups, start from RunNextTask() instead. The hook is defined in the
+      chromium_src override of this file.
+    preempt_function_impl:
+      function_name: HostResolverManager::Job::RunNextTask
+      return_if: MaybeDropBlockedOnionTasks()

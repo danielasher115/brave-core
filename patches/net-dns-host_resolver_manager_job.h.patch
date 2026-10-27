@@ -1,0 +1,17 @@
+diff --git a/net/dns/host_resolver_manager_job.h b/net/dns/host_resolver_manager_job.h
+index 3ecc432d30a1d72ce3a4dc92616c9d6b292af56c..68f42524927a08a99239305d78c0a09c6490cd5a 100644
+--- a/net/dns/host_resolver_manager_job.h
++++ b/net/dns/host_resolver_manager_job.h
+@@ -214,6 +214,12 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
+     return dns_task_results_manager_.get();
+   }
+ 
++ protected:
++  // If .onion resolution is blocked for this job, drops the tasks that
++  // would send the hostname to the system resolver or DoH. Returns true
++  // if it completed the job from the hosts file instead.
++  bool MaybeDropBlockedOnionTasks();
++
+  private:
+   // Explains why a Job didn't attempt HTTPS query.
+   // These values are persisted to logs. Entries should not be renumbered and

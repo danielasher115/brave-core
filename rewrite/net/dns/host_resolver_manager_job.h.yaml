@@ -1,0 +1,18 @@
+# Copyright (c) 2026 The Brave Authors. All rights reserved.
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this file,
+# You can obtain one at https://mozilla.org/MPL/2.0/.
+
+substitutions:
+  - description: |-
+      Declare the Brave hook that keeps blocked .onion lookups local.
+
+      The hook is defined in the chromium_src override of
+      host_resolver_manager_job.cc.
+    add_to_protected:
+      class_name: HostResolverManager::Job
+      code: |-
+        // If .onion resolution is blocked for this job, drops the tasks that
+        // would send the hostname to the system resolver or DoH. Returns true
+        // if it completed the job from the hosts file instead.
+        bool MaybeDropBlockedOnionTasks();

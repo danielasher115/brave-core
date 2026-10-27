@@ -16,7 +16,8 @@ substitutions:
       code: |-
         // How the context treats Tor and .onion hostnames. This describes the
         // context only; it is unrelated to the policy that disables Brave's
-        // Tor windows, which leaves a context's TorMode as it is.
+        // Tor windows, which leaves a context's TorMode as it is. Builds
+        // without Tor ignore it and never block .onion.
         enum class TorMode {
           // The context belongs to a Tor profile. .onion requests go through
           // the Tor proxy, so the host resolver does not block them.

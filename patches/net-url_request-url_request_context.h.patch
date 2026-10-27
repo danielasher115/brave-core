@@ -1,14 +1,15 @@
 diff --git a/net/url_request/url_request_context.h b/net/url_request/url_request_context.h
-index f1676812dabbade4be96e9d17ce74313c663e45e..d88e6907ea01c64651ea4afb3ab2c5340631b842 100644
+index f1676812dabbade4be96e9d17ce74313c663e45e..d914c5b9d74b98114efe3ebb645b56307356ba26 100644
 --- a/net/url_request/url_request_context.h
 +++ b/net/url_request/url_request_context.h
-@@ -270,6 +270,28 @@ class NET_EXPORT URLRequestContext final {
+@@ -270,6 +270,29 @@ class NET_EXPORT URLRequestContext final {
      job_factory_ = job_factory;
    }
  
 +  // How the context treats Tor and .onion hostnames. This describes the
 +  // context only; it is unrelated to the policy that disables Brave's
-+  // Tor windows, which leaves a context's TorMode as it is.
++  // Tor windows, which leaves a context's TorMode as it is. Builds
++  // without Tor ignore it and never block .onion.
 +  enum class TorMode {
 +    // The context belongs to a Tor profile. .onion requests go through
 +    // the Tor proxy, so the host resolver does not block them.

@@ -1,8 +1,16 @@
 diff --git a/net/dns/host_resolver_manager_job.cc b/net/dns/host_resolver_manager_job.cc
-index 50ee2e4ead425f2c700a69c3b671d54ddb9dba24..c1c2a94093e5aea6cc6b3a9af142a249afb14342 100644
+index 50ee2e4ead425f2c700a69c3b671d54ddb9dba24..fb55e3e10599314789945b0d74db4a3abe0634ea 100644
 --- a/net/dns/host_resolver_manager_job.cc
 +++ b/net/dns/host_resolver_manager_job.cc
-@@ -1336,6 +1336,7 @@ void HostResolverManager::Job::CompleteRequests(
+@@ -508,6 +508,7 @@ void HostResolverManager::Job::OnRemovedFromJobMap() {
+ }
+ 
+ void HostResolverManager::Job::RunNextTask() {
++  if (MaybeDropBlockedOnionTasks()) return;
+   // If there are no tasks left to try, cache any stored results and complete
+   // the request with the last stored result. All stored results should be
+   // errors.
+@@ -1336,6 +1337,7 @@ void HostResolverManager::Job::CompleteRequests(
    }
  
    RecordJobHistograms(results, task_type);

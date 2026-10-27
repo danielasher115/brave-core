@@ -5,20 +5,29 @@
 
 substitutions:
   - description: |-
-      Fail .onion lookups that would leave the machine when the request
-      context blocks them.
+      Keep a blocked .onion lookup to its local tasks.
 
-      ResolveLocally() ends with this cache-miss return once the cache, hosts
-      file and config presets have no answer; its callers then start a job for
-      the system resolver or DoH. Failing here instead keeps .onion names from
-      reaching either, while local answers still apply.
+      Dropping the tasks that would reach the system resolver or DoH before the
+      local lookups run lets the cache lookups queued after them, and the hosts
+      file that is otherwise left to getaddrinfo(), still answer.
+    add_before_line:
+      line: '// Do initial cache lookups.'
+      code: |2
+          if (IsOnionHostnameResolutionBlocked(job_key.resolve_context.get(),
+                                               job_key.host.GetHostname())) {
+            std::erase_if(*out_tasks,
+                          [](TaskType task) { return !IsLocalTask(task); });
+          }
+
+  - description: |-
+      Fail a blocked .onion lookup that no local task answered.
     add_before_line:
       line:
         'return HostCache::Entry(ERR_DNS_CACHE_MISS,
         HostCache::Entry::SOURCE_UNKNOWN);'
       code: |2-
-          if (IsOnionHostnameResolutionBlocked(job_key)) {
-            out_tasks->clear();
+          if (IsOnionHostnameResolutionBlocked(job_key.resolve_context.get(),
+                                               job_key.host.GetHostname())) {
             return HostCache::Entry(ERR_NAME_NOT_RESOLVED,
                                     HostCache::Entry::SOURCE_UNKNOWN);
           }
