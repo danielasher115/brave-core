@@ -1375,9 +1375,7 @@ void BraveContentBrowserClient::ConfigureNetworkContextParams(
       cert_verifier_creation_params);
 #if BUILDFLAG(ENABLE_TOR)
   network_context_params->tor_mode = tor::GetNetworkContextTorMode(context);
-#else
-  network_context_params->tor_mode = network::mojom::TorMode::kPassthrough;
-#endif  // BUILDFLAG(ENABLE_TOR)
+#endif
 }
 
 template <template <typename> class T>
