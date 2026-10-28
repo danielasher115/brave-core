@@ -123,6 +123,22 @@ commit body and in the report. Then carry on. Examples from cr158:
   switches, initializers and enums. Prefer a precise plaster over a
   `#define X X_ChromiumImpl` token rewrite, which silently rewrites every later
   occurrence. See `docs/plaster.md` and `docs/plaster_dos_and_donts.md`.
+- When a fix touches a `chromium_src` file that uses a `#define` to rewrite the
+  upstream file it includes, consider moving that `#define` to plaster:
+
+  - If the move is simple (a token rename or a hook at one site), do it as part
+    of the fix.
+  - If keeping it separate makes the fix easier to review, make the migration a
+    follow-up commit right after the fix.
+  - Commit a migration that stands on its own with
+    `git cr commit --tagged=plaster` (plus the culprit, if the migration is what
+    fixes it).
+
+  (cr158: the `TabContainerImpl` → `BraveTabContainer` `#define` in the
+  `tab_strip.cc` shadow and the `ShowIfNotOffTheRecordProfile` `#define` in the
+  `infobar_utils.cc` shadow both became plaster substitutions at their call
+  sites.)
+
 - Plaster `description`s read like a commit message: a subject saying what, a
   blank line, then why. Keep `count: 1` unless a different count is deliberate
   and commented.
