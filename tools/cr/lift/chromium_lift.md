@@ -176,10 +176,18 @@ says too little, file a request under `## Tooling TODOs` at the end of
 `tools/cr/M<N>_codehealth.md` (create the section if it's missing). Write one
 `###` item per tool problem: what the tool does now, the cr<N> example that
 showed it, and checkboxes for the changes requested. Extend an existing item
-rather than duplicating it. These requests are reviewed separately; don't change
-Brockit, Plaster or `git cr` themselves during a lift, and don't let a missing
-feature block the run. Commit them with
-`git commit -m 'Version CodeHealth tracker'`, like other tracker changes.
+rather than duplicating it. These requests are reviewed separately, so don't
+implement missing features or improvements during a lift, and don't let one
+block the run. Commit them with `git commit -m 'Version CodeHealth tracker'`,
+like other tracker changes.
+
+A hard bug is different: a tool that crashes, corrupts the tree or commits, or
+produces a wrong result the lift can't work around. Fix it in the tool, with a
+test in its `tools/cr/*_test.py` and the tool's tests passing. Commit the fix on
+its own with `git cr commit --tagged=<tool>` (e.g. `--tagged=brockit` for
+`brockit.py` or `rebase.py`), never mixed into a lift fix, and list it in the
+report. If the fix isn't small and safe, work around the bug, file it as a
+Tooling TODO, and carry on.
 
 `tools/cr/lift/lift_tools.py` collects the checks done repeatedly by hand:
 
@@ -566,6 +574,7 @@ Keep it as you go; print it at the end. Include:
 - Issues found but left alone because the codehealth tracker covers them, and
   any test failures attributed to the environment or to flakiness.
 - Tooling TODOs filed or extended in `M<N>_codehealth.md`.
+- Tool bugs fixed during the run, with their commits.
 - What wasn't verified: platforms not built (iOS, Windows, macOS), tests that
   couldn't run (official-build-only code, Android without an emulator), and
   fixes verified only statically.
