@@ -27,7 +27,7 @@ These are the user-facing scripts in this directory:
   `oldest..newest` git commit range.
 - `prune_test_filters.py` — Detects and (optionally) removes obsolete entries
   from the current platform's test-filter files.
-- `lift/lift_tools.py` — Helpers for the autonomous lift in
+- `lift/autolift.py` — Helpers for the autonomous lift in
   [lift/chromium_lift.md](lift/chromium_lift.md): build log summaries, culprit
   lookup, and culprit hash verification.
 

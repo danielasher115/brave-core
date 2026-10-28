@@ -8,7 +8,7 @@ import subprocess
 import unittest
 from unittest import mock
 
-import lift_tools
+import autolift
 
 _FULL_HASH = '5691202e214341a5d96a3296c1b9811cce19572b'
 
@@ -16,7 +16,7 @@ _FULL_HASH = '5691202e214341a5d96a3296c1b9811cce19572b'
 class StripAnsiTest(unittest.TestCase):
     def test_removes_colour_escapes(self):
         self.assertEqual(
-            lift_tools.strip_ansi('\x1b[31;1mFAILED:\x1b[0m x'), 'FAILED: x'
+            autolift.strip_ansi('\x1b[31;1mFAILED:\x1b[0m x'), 'FAILED: x'
         )
 
 
@@ -32,7 +32,7 @@ class SummarizeBuildTest(unittest.TestCase):
                 ' 14m56.78s Build Failure: 26405 done, 10 failed, 3 remaining',
             ]
         )
-        summary = lift_tools.summarize_build(log)
+        summary = autolift.summarize_build(log)
         self.assertEqual(
             summary.status, 'Build Failure: 26405 done, 10 failed, 3 remaining'
         )
@@ -65,7 +65,7 @@ class SummarizeBuildTest(unittest.TestCase):
                 "ModuleNotFoundError: No module named 'utils.Table'",
             ]
         )
-        errors = [e for _, e in lift_tools.summarize_build(log).errors]
+        errors = [e for _, e in autolift.summarize_build(log).errors]
         self.assertEqual(len(errors), 8)
         self.assertIn(
             'Invalid boolean attribute expression  '
@@ -74,7 +74,7 @@ class SummarizeBuildTest(unittest.TestCase):
         )
 
     def test_success(self):
-        summary = lift_tools.summarize_build(
+        summary = autolift.summarize_build(
             '.The build has finished successfully.\n'
         )
         self.assertEqual(summary.status, 'The build has finished successfully.')
@@ -92,7 +92,7 @@ class ParseCulpritHashesTest(unittest.TestCase):
             'chromium/src/+/8620801\n'
             f'https://chromium.googlesource.com/chromium/src/+/{_FULL_HASH}\n'
         )
-        self.assertEqual(lift_tools.parse_culprit_hashes(message), [_FULL_HASH])
+        self.assertEqual(autolift.parse_culprit_hashes(message), [_FULL_HASH])
 
     def test_ignores_links_outside_the_block(self):
         message = (
@@ -103,63 +103,63 @@ class ParseCulpritHashesTest(unittest.TestCase):
             '\ncommit a1fc21843e8bb3bc0db2fbe4d338e304010bc37b\n'
         )
         self.assertEqual(
-            lift_tools.parse_culprit_hashes(message),
+            autolift.parse_culprit_hashes(message),
             ['a1fc21843e8bb', '59ee62c696c68'],
         )
 
     def test_no_culprit(self):
-        self.assertEqual(lift_tools.parse_culprit_hashes('[cr158] Subject'), [])
+        self.assertEqual(autolift.parse_culprit_hashes('[cr158] Subject'), [])
 
 
 class CulpritProblemTest(unittest.TestCase):
     def test_rejects_hash_that_does_not_resolve(self):
-        with mock.patch.object(lift_tools.repository, 'chromium') as chromium:
+        with mock.patch.object(autolift.repository, 'chromium') as chromium:
             chromium.run_git.side_effect = subprocess.CalledProcessError(
                 1, 'git'
             )
             self.assertEqual(
-                lift_tools.culprit_problem(
+                autolift.culprit_problem(
                     _FULL_HASH, '158.0.8117.1..158.0.8127.2'
                 ),
                 f'{_FULL_HASH} is not a Chromium commit',
             )
 
     def test_rejects_commit_outside_range(self):
-        with mock.patch.object(lift_tools.repository, 'chromium') as chromium:
+        with mock.patch.object(autolift.repository, 'chromium') as chromium:
             # rev-parse succeeds, then the commit is already in the old tag.
             chromium.run_git.side_effect = [_FULL_HASH, '', '']
             self.assertEqual(
-                lift_tools.culprit_problem(
+                autolift.culprit_problem(
                     '5691202e', '158.0.8117.1..158.0.8127.2'
                 ),
                 '5691202e is not in 158.0.8117.1..158.0.8127.2',
             )
 
     def test_accepts_commit_in_range(self):
-        with mock.patch.object(lift_tools.repository, 'chromium') as chromium:
+        with mock.patch.object(autolift.repository, 'chromium') as chromium:
             chromium.run_git.side_effect = [
                 _FULL_HASH,
                 '',
                 subprocess.CalledProcessError(1, 'git'),
             ]
             self.assertIsNone(
-                lift_tools.culprit_problem(
+                autolift.culprit_problem(
                     _FULL_HASH, '158.0.8117.1..158.0.8127.2'
                 )
             )
 
     def test_rejects_malformed_range(self):
         with self.assertRaises(ValueError):
-            lift_tools.culprit_problem(_FULL_HASH, '158.0.8127.2')
+            autolift.culprit_problem(_FULL_HASH, '158.0.8127.2')
 
 
 class ChooseBaseTest(unittest.TestCase):
     def test_previous_milestone_branch_until_it_lands(self):
-        self.assertEqual(lift_tools.choose_base(158, 156), 'origin/cr157')
+        self.assertEqual(autolift.choose_base(158, 156), 'origin/cr157')
 
     def test_master_once_previous_milestone_landed(self):
-        self.assertEqual(lift_tools.choose_base(158, 157), 'origin/master')
-        self.assertEqual(lift_tools.choose_base(158, 158), 'origin/master')
+        self.assertEqual(autolift.choose_base(158, 157), 'origin/master')
+        self.assertEqual(autolift.choose_base(158, 158), 'origin/master')
 
 
 class PrepareTest(unittest.TestCase):
@@ -167,8 +167,8 @@ class PrepareTest(unittest.TestCase):
         args = mock.Mock(milestone=158, no_rebase=True, force=False)
         for key, value in kwargs.items():
             setattr(args, key, value)
-        with mock.patch.object(lift_tools.repository, 'brave', brave):
-            return lift_tools._cmd_prepare(args)
+        with mock.patch.object(autolift.repository, 'brave', brave):
+            return autolift._cmd_prepare(args)
 
     def test_refuses_during_rebase(self):
         brave = mock.MagicMock()

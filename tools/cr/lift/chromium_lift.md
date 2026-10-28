@@ -184,7 +184,7 @@ commit body and in the report. Then carry on. Examples from cr158:
 
 Rely on tools over inference wherever one exists or can be written: 🚀Brockit,
 🩹Plaster, `git cr` (`commit`, `follow-renames`), the `pnpm run` commands,
-`tools/recipes`, and `lift_tools.py` below. A tool's result is reproducible and
+`tools/recipes`, and `autolift.py` below. A tool's result is reproducible and
 reviewable; a judgement call has to be re-made on every run.
 
 When a step needs work that a tool could do, or a tool gets something wrong or
@@ -205,21 +205,21 @@ its own with `git cr commit --tagged=<tool>` (e.g. `--tagged=brockit` for
 report. If the fix isn't small and safe, work around the bug, file it as a
 Tooling TODO, and carry on.
 
-`tools/cr/lift/lift_tools.py` collects the checks done repeatedly by hand:
+`tools/cr/lift/autolift.py` collects the checks done repeatedly by hand:
 
 ```sh
 # Reset cr<N>, set its base as upstream, and start brockit rebase (step 1).
-vpython3 tools/cr/lift/lift_tools.py prepare 158
+vpython3 tools/cr/lift/autolift.py prepare 158
 
 # Outcome, failed steps and distinct errors of a build log.
-vpython3 tools/cr/lift/lift_tools.py build-summary /tmp/lift/build.log
+vpython3 tools/cr/lift/autolift.py build-summary /tmp/lift/build.log
 
 # Upstream commits in the bump range touching paths, or adding/removing a string.
-vpython3 tools/cr/lift/lift_tools.py culprits 158.0.8117.1..158.0.8127.2 net/http/foo.cc
-vpython3 tools/cr/lift/lift_tools.py culprits 158.0.8117.1..158.0.8127.2 --symbol kFooFeature
+vpython3 tools/cr/lift/autolift.py culprits 158.0.8117.1..158.0.8127.2 net/http/foo.cc
+vpython3 tools/cr/lift/autolift.py culprits 158.0.8117.1..158.0.8127.2 --symbol kFooFeature
 
 # Check every culprit cited since the base: it resolves, and it's in range.
-vpython3 tools/cr/lift/lift_tools.py verify-culprits origin/cr157 157.0.8103.15..158.0.8127.2
+vpython3 tools/cr/lift/autolift.py verify-culprits origin/cr157 157.0.8103.15..158.0.8127.2
 ```
 
 Logs go under a scratch directory such as `/tmp/lift/`, never in the repo.
@@ -231,7 +231,7 @@ Logs go under a scratch directory such as `/tmp/lift/`, never in the repo.
 ### 1. Reset and rebase
 
 ```sh
-vpython3 tools/cr/lift/lift_tools.py prepare <N>
+vpython3 tools/cr/lift/autolift.py prepare <N>
 ```
 
 It fetches `master` and `cr<N>`, picks the base, checks out `cr<N>` reset to
@@ -279,7 +279,7 @@ needed" sections. Note the bump range it prints. Handle each section, then run
 `brockit lift --with-github --to=@latest-for-branch --continue`.
 
 For each item, find the culprit first
-(`lift_tools.py culprits <bump range> <path>`), then fix:
+(`autolift.py culprits <bump range> <path>`), then fix:
 
 - **Files that cannot be patched anymore: renamed or moved.** Run
   `git cr follow-renames <full culprit hash>`. It moves patches and yamls and
@@ -340,7 +340,7 @@ Use exactly this command; never raw `autoninja`, `ninja` or `siso`. The out dir
 is `../out/Component`. `--ignore_compile_failure` keeps going after errors, so
 one round shows many failures. Loop:
 
-1. `lift_tools.py build-summary /tmp/lift/build-linux.log`.
+1. `autolift.py build-summary /tmp/lift/build-linux.log`.
 2. Group the errors by root cause, not by file. One header change can fail 60
    objects.
 3. For each group, find the culprit and the fix (see
@@ -437,7 +437,7 @@ Before finishing, fold what the run taught into this file, following
 
 ### 8. Wrap up
 
-- `lift_tools.py verify-culprits <base> <branch range>` reports no problems.
+- `autolift.py verify-culprits <base> <branch range>` reports no problems.
 - `git status` is clean. Untracked files are scratch you created, or deps
   fetched into git-ignored paths.
 - No build is left running.
@@ -598,7 +598,7 @@ mid-run: a later step shouldn't repeat the mistake.
 - **New failure mechanisms.** Breakage whose cause and fix
   [Fix patterns](#fix-patterns) doesn't describe.
 - **Repeated manual work.** A check run by hand in more than one round, or in
-  two runs. If it belongs in `lift_tools.py`, add it there; if it belongs in
+  two runs. If it belongs in `autolift.py`, add it there; if it belongs in
   Brockit, Plaster, `git cr` or another tool, file it under Tooling TODOs (see
   [Tooling](#tooling)).
 - **Misses.** Problems in a range a run already lifted that surfaced later,
@@ -620,10 +620,10 @@ mid-run: a later step shouldn't repeat the mistake.
 - If a bullet for the same mechanism exists, refresh its example or sharpen its
   check rather than adding a near-duplicate.
 - Remove advice when its mechanism is gone, or when tooling now handles it (a
-  Brockit step, a presubmit check, a `lift_tools.py` subcommand). Leave a
-  one-line pointer if the tool's name helps.
+  Brockit step, a presubmit check, a `autolift.py` subcommand). Leave a one-line
+  pointer if the tool's name helps.
 - When a check is mechanical and has been done by hand in two runs, add it to
-  `lift_tools.py`, with tests in `lift_tools_test.py`, and shorten the bullet to
+  `autolift.py`, with tests in `autolift_test.py`, and shorten the bullet to
   point at it.
 - Prefer replacing text to appending it, so the file stays readable in one pass.
 
