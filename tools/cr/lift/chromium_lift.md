@@ -217,8 +217,7 @@ before that, master is still on `N-2` and the base is `origin/cr<N-1>`.
 
 ```sh
 git fetch origin master cr<N>
-git show origin/master:package.json \
-    | python3 -c 'import json, sys; print(json.load(sys.stdin)["config"]["projects"]["chrome"]["tag"])'
+brockit show --package-version origin/master  # prints master's Chromium tag
 ```
 
 Don't decide from whether `origin/cr<N-1>` still exists or is an ancestor of
