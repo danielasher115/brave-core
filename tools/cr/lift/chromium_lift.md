@@ -208,6 +208,9 @@ Tooling TODO, and carry on.
 `tools/cr/lift/lift_tools.py` collects the checks done repeatedly by hand:
 
 ```sh
+# Reset cr<N>, set its base as upstream, and start brockit rebase (step 1).
+vpython3 tools/cr/lift/lift_tools.py prepare 158
+
 # Outcome, failed steps and distinct errors of a build log.
 vpython3 tools/cr/lift/lift_tools.py build-summary /tmp/lift/build.log
 
@@ -227,34 +230,21 @@ Logs go under a scratch directory such as `/tmp/lift/`, never in the repo.
 
 ### 1. Reset and rebase
 
-First pick the base. Once the previous milestone has landed, master's Chromium
-version is on milestone `N-1` (or later), and the base is `origin/master`;
-before that, master is still on `N-2` and the base is `origin/cr<N-1>`.
-
 ```sh
-git fetch origin master cr<N>
-brockit show --package-version origin/master  # prints master's Chromium tag
+vpython3 tools/cr/lift/lift_tools.py prepare <N>
 ```
 
-Don't decide from whether `origin/cr<N-1>` still exists or is an ancestor of
-master: the branch can outlive its merge, and a squashed merge isn't an
-ancestor. With the base chosen (`BASE` below is `origin/master` or
-`origin/cr<N-1>`):
+It fetches `master` and `cr<N>`, picks the base, checks out `cr<N>` reset to
+`origin/cr<N>`, sets the base as its upstream, and starts
+`brockit rebase --squash-minor-bumps --discard-regen-changes`. It prints the
+base it picked: use it wherever this document says `<base>`, such as
+`verify-culprits`. It refuses to run during a rebase, or when tracked files have
+changes that the reset would discard.
 
-```sh
-git fetch origin cr<N-1>  # only when BASE is origin/cr<N-1>
-git checkout cr<N>
-git reset --hard origin/cr<N>
-git branch --set-upstream-to=$BASE
-git rev-parse --abbrev-ref @{upstream}  # must print $BASE
-brockit rebase --squash-minor-bumps --discard-regen-changes
-```
-
-Brockit takes the branch's upstream as the base to rebase onto, so set it before
-rebasing. A fresh checkout of `cr<N>` tracks `origin/cr<N>`, and rebasing onto
-that does nothing useful. The upstream also stays the base for `brockit lift`
-(`--from-ref` defaults to `@upstream`). Use the same base wherever this document
-says `origin/cr<N-1>`, such as `verify-culprits`.
+The base is `origin/master` once master's Chromium version is on milestone
+`N-1`, which is when the previous milestone has landed, and `origin/cr<N-1>`
+before that. Brockit takes the branch's upstream as the base for both
+`brockit rebase` and `brockit lift` (`--from-ref` defaults to `@upstream`).
 
 The rebase also autosquashes `fixup!` and `amend!` commits. On each conflict,
 resolve it, `git add` the files and run `git rebase --continue` (with

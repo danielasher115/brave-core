@@ -6,6 +6,10 @@
 """Helpers for the autonomous Chromium lift described in tools/cr/lift/chromium_lift.md.
 
 Subcommands:
+    prepare N [--no-rebase] [--force]
+        Resets the local cr<N> branch to origin/cr<N>, sets its upstream to the
+        base (origin/cr<N-1>, or origin/master once master is on milestone N-1)
+        and starts `brockit rebase --squash-minor-bumps --discard-regen-changes`.
     build-summary LOG
         Summarises a `pnpm run build` log: the final status line, the steps
         that failed, and each distinct error with how often it occurred.
@@ -28,6 +32,9 @@ import sys
 
 import _boot  # noqa: F401  -- adds parent tools/cr to sys.path
 import repository  # noqa: E402  -- after _boot
+from versioning import Version  # noqa: E402  -- after _boot
+
+_BROCKIT = Path(__file__).resolve().parent.parent / 'brockit.py'
 
 _ANSI_ESCAPE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]')
 
@@ -164,6 +171,67 @@ def culprit_problem(culprit: str, revision_range: str) -> str | None:
     return None
 
 
+def choose_base(milestone: int, master_major: int) -> str:
+    """Returns the branch `cr<milestone>` should be rebased onto.
+
+    The previous milestone lives on `cr<milestone - 1>` until it lands on
+    master, at which point master's Chromium version moves to that milestone.
+    Whether `origin/cr<milestone - 1>` still exists, or is an ancestor of
+    master, says nothing: branches outlive their merges, and merges can be
+    squashed.
+    """
+    if master_major >= milestone - 1:
+        return 'origin/master'
+    return f'origin/cr{milestone - 1}'
+
+
+def _cmd_prepare(args: argparse.Namespace) -> int:
+    brave = repository.brave
+    branch = f'cr{args.milestone}'
+    if brave.is_rebase_in_progress():
+        print('A rebase is in progress; finish or abort it first.')
+        return 1
+    if not args.force and brave.run_git(
+        'status', '--porcelain', '--untracked-files=no'
+    ):
+        print(
+            f'Tracked files have changes, and resetting {branch} would '
+            'discard them. Commit or stash them, or pass --force.'
+        )
+        return 1
+
+    brave.run_git('fetch', 'origin', 'master', branch)
+    master_version = Version.from_git('origin/master')
+    base = choose_base(args.milestone, master_version.major)
+    if base != 'origin/master':
+        brave.run_git('fetch', 'origin', f'cr{args.milestone - 1}')
+
+    brave.run_git('checkout', '-B', branch, f'origin/{branch}')
+    brave.run_git('branch', f'--set-upstream-to={base}')
+    upstream = brave.run_git('rev-parse', '--abbrev-ref', '@{upstream}')
+    if upstream != base:
+        print(f'Upstream is {upstream}, expected {base}.')
+        return 1
+    print(
+        f'master is on Chromium {master_version}; {branch} reset to '
+        f'origin/{branch}, upstream {base}.'
+    )
+
+    if args.no_rebase:
+        return 0
+    return subprocess.run(
+        [
+            sys.executable,
+            str(_BROCKIT),
+            'rebase',
+            '--squash-minor-bumps',
+            '--discard-regen-changes',
+        ],
+        cwd=brave.root,
+        check=False,
+    ).returncode
+
+
 def _cmd_build_summary(args: argparse.Namespace) -> int:
     log = args.log.read_bytes().decode('utf-8', errors='replace')
     summary = summarize_build(log)
@@ -212,6 +280,23 @@ def _cmd_verify_culprits(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     subparsers = parser.add_subparsers(dest='command', required=True)
+
+    prepare = subparsers.add_parser(
+        'prepare',
+        help='Reset cr<N>, set its base as upstream, and start the rebase.',
+    )
+    prepare.add_argument('milestone', type=int, help='e.g. 158')
+    prepare.add_argument(
+        '--no-rebase',
+        action='store_true',
+        help='Stop before running brockit rebase.',
+    )
+    prepare.add_argument(
+        '--force',
+        action='store_true',
+        help='Reset even if tracked files have changes (discards them).',
+    )
+    prepare.set_defaults(func=_cmd_prepare)
 
     summary = subparsers.add_parser(
         'build-summary', help='Summarise a build log.'

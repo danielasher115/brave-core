@@ -153,5 +153,38 @@ class CulpritProblemTest(unittest.TestCase):
             lift_tools.culprit_problem(_FULL_HASH, '158.0.8127.2')
 
 
+class ChooseBaseTest(unittest.TestCase):
+    def test_previous_milestone_branch_until_it_lands(self):
+        self.assertEqual(lift_tools.choose_base(158, 156), 'origin/cr157')
+
+    def test_master_once_previous_milestone_landed(self):
+        self.assertEqual(lift_tools.choose_base(158, 157), 'origin/master')
+        self.assertEqual(lift_tools.choose_base(158, 158), 'origin/master')
+
+
+class PrepareTest(unittest.TestCase):
+    def _prepare(self, brave: mock.MagicMock, **kwargs) -> int:
+        args = mock.Mock(milestone=158, no_rebase=True, force=False)
+        for key, value in kwargs.items():
+            setattr(args, key, value)
+        with mock.patch.object(lift_tools.repository, 'brave', brave):
+            return lift_tools._cmd_prepare(args)
+
+    def test_refuses_during_rebase(self):
+        brave = mock.MagicMock()
+        brave.is_rebase_in_progress.return_value = True
+        self.assertEqual(self._prepare(brave), 1)
+        brave.run_git.assert_not_called()
+
+    def test_refuses_to_discard_tracked_changes(self):
+        brave = mock.MagicMock()
+        brave.is_rebase_in_progress.return_value = False
+        brave.run_git.return_value = ' M DEPS'
+        self.assertEqual(self._prepare(brave), 1)
+        brave.run_git.assert_called_once_with(
+            'status', '--porcelain', '--untracked-files=no'
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
