@@ -24,6 +24,7 @@ class UserScriptManager {
       .faviconFetcher,
       .resourceDownloader,
       .nightMode,
+      .videoBackgroundPlayback,
     ]
 
     if Preferences.UserScript.playlist.value {
@@ -127,6 +128,7 @@ class UserScriptManager {
     case youtubeQuality
     case braveLeoAIChat
     case braveTranslate
+    case videoBackgroundPlayback
 
     fileprivate var script: WKUserScript? {
       switch self {
@@ -167,6 +169,7 @@ class UserScriptManager {
       case .youtubeQuality:
         return Preferences.UserScript.youtubeQuality.value
           ? YoutubeQualityScriptHandler.userScript : nil
+      case .videoBackgroundPlayback: return VideoBackgroundPlaybackScript.userScript
       case .braveLeoAIChat:
         return Preferences.UserScript.leo.value ? BraveLeoScriptHandler.userScript : nil
       case .braveTranslate:
