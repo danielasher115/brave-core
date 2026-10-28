@@ -1926,7 +1926,7 @@ The "Chromium changes:" block keeps a hash as given, so some commits cite
 
 - [ ] Resolve the culprit to its full hash before writing the block
 - [ ] Reject a culprit outside the branch's Chromium range (what
-      `lift_tools.py verify-culprits` checks after the fact)
+      `autolift.py verify-culprits` checks after the fact)
 
 ### `pnpm run build`: refuse a second build in the same out dir
 
@@ -1946,6 +1946,6 @@ A `--gtest_filter` that matches nothing reports success (cr158:
 ### `pnpm run build`: summarise failures
 
 Every build round starts by digging the failed steps and distinct errors out of
-the log; `lift_tools.py build-summary` does it after the fact.
+the log; `autolift.py build-summary` does it after the fact.
 
 - [ ] Print that summary at the end of a failed build
