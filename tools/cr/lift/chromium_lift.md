@@ -82,8 +82,9 @@ commit body and in the report. Then carry on. Examples from cr158:
   when its message must change too (for an `amend!` message, keep the original
   subject and the "Chromium changes:" block, or the squash loses them). Fixups
   are squashed by the next `brockit rebase`.
-- Android-only fixes also get `--tagged=Android`. Fixes that aren't ready get
-  `--tagged=WIP`. Combine as `--tagged=Android,WIP`.
+- Platform-centric fixes get the platform tag: `--tagged=Android` for Android,
+  `--tagged=iOS` for iOS (cr158: the iOS key pinning includes). Fixes that
+  aren't ready get `--tagged=WIP`. Combine as `--tagged=Android,WIP`.
 - A fix without an upstream culprit (a latent Brave bug that only now shows up)
   is committed without `--culprit`; say why in the body.
 - Messages follow `../agents/shared/skills/cl-description/cl-description.md`: a
