@@ -869,8 +869,8 @@ Each numbered section holds `###` items, each with its explanation and
 checkboxes. Leave out empty sections, and order items within a section by
 urgency. Regressions go first: silent ones, then those only some platforms
 build. "For privacy review" is a plain list, one line per upstream feature.
-"Tooling TODOs" is filed by lift runs (see `tools/cr/lift/chromium_lift.md`):
-keep it when updating the tracker, and don't review it as upstream items.
+"Tooling TODOs" is filed by lift runs (see `tools/cr/autolift/SKILL.md`): keep
+it when updating the tracker, and don't review it as upstream items.
 
 Format the file afterwards with `pnpm run format --base HEAD`. Without
 `--base HEAD`, it formats everything the cr branch changed since

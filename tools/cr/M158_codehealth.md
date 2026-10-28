@@ -1879,9 +1879,9 @@ Upstream's original stopped building a static `NoDestructor<std::string>`
 ## Tooling TODOs
 
 Requests to improve the rebase and lift tooling (🚀Brockit, 🩹Plaster, `git cr`,
-`pnpm run` commands, `tools/recipes`, `tools/cr/lift`), so that less of the lift
-depends on judgement. Filed by lift runs; see
-[chromium_lift.md](lift/chromium_lift.md#tooling).
+`pnpm run` commands, `tools/recipes`, `tools/cr/autolift`), so that less of the
+lift depends on judgement. Filed by lift runs; see
+[SKILL.md](autolift/SKILL.md#tooling).
 
 ### `brockit rebase` should resolve its mechanical conflicts itself
 
