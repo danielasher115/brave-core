@@ -99,8 +99,8 @@ commit body and in the report. Then carry on. Examples from cr158:
 - Codehealth tracker changes, including Tooling TODOs, are committed together
   with any `tools/cr/codehealth_review.md` change, with the message
   `Version CodeHealth tracker`.
-- Changes to this file and the other `tools/cr/lift/` files are committed with
-  `Version lift updates` (see [Committing it](#committing-it)).
+- Changes to this file and the other `tools/cr/autolift/` files are committed
+  with `Version lift updates` (see [Committing it](#committing-it)).
 
 ### Editing upstream code
 
@@ -205,21 +205,21 @@ its own with `git cr commit --tagged=<tool>` (e.g. `--tagged=brockit` for
 report. If the fix isn't small and safe, work around the bug, file it as a
 Tooling TODO, and carry on.
 
-`tools/cr/lift/autolift.py` collects the checks done repeatedly by hand:
+`tools/cr/autolift/autolift.py` collects the checks done repeatedly by hand:
 
 ```sh
 # Reset cr<N>, set its base as upstream, and start brockit rebase (step 1).
-vpython3 tools/cr/lift/autolift.py prepare 158
+vpython3 tools/cr/autolift/autolift.py prepare 158
 
 # Outcome, failed steps and distinct errors of a build log.
-vpython3 tools/cr/lift/autolift.py build-summary /tmp/lift/build.log
+vpython3 tools/cr/autolift/autolift.py build-summary /tmp/lift/build.log
 
 # Upstream commits in the bump range touching paths, or adding/removing a string.
-vpython3 tools/cr/lift/autolift.py culprits 158.0.8117.1..158.0.8127.2 net/http/foo.cc
-vpython3 tools/cr/lift/autolift.py culprits 158.0.8117.1..158.0.8127.2 --symbol kFooFeature
+vpython3 tools/cr/autolift/autolift.py culprits 158.0.8117.1..158.0.8127.2 net/http/foo.cc
+vpython3 tools/cr/autolift/autolift.py culprits 158.0.8117.1..158.0.8127.2 --symbol kFooFeature
 
 # Check every culprit cited since the base: it resolves, and it's in range.
-vpython3 tools/cr/lift/autolift.py verify-culprits origin/cr157 157.0.8103.15..158.0.8127.2
+vpython3 tools/cr/autolift/autolift.py verify-culprits origin/cr157 157.0.8103.15..158.0.8127.2
 ```
 
 Logs go under a scratch directory such as `/tmp/lift/`, never in the repo.
@@ -231,7 +231,7 @@ Logs go under a scratch directory such as `/tmp/lift/`, never in the repo.
 ### 1. Reset and rebase
 
 ```sh
-vpython3 tools/cr/lift/autolift.py prepare <N>
+vpython3 tools/cr/autolift/autolift.py prepare <N>
 ```
 
 It fetches `master` and `cr<N>`, picks the base, checks out `cr<N>` reset to
@@ -629,7 +629,7 @@ mid-run: a later step shouldn't repeat the mistake.
 
 ### Committing it
 
-- Commit changes to this file, to the `tools/cr/lift/` helpers and to their
+- Commit changes to this file, to the `tools/cr/autolift/` helpers and to their
   `tools/cr/README.md` entry with `git commit -m 'Version lift updates'`,
   separately from the lift's fixes and from the tracker, so they can be audited.
   Plain `git commit`: no culprit, no tags, no trailers. The subject is pinned in
