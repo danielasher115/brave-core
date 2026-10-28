@@ -290,7 +290,7 @@ export class MockedWalletApiProxy {
     setDefaultBaseCurrency: async (currency: string) => {
       this.defaultBaseCurrency = currency
     },
-    getActiveOrigin: async () => {
+    getActiveOriginDeprecated: async () => {
       return {
         originInfo: {
           originSpec: 'https://brave.com',

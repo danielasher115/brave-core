@@ -10,7 +10,6 @@ import { BraveWallet } from '../../../constants/types'
 
 // Queries
 import {
-  useGetActiveOriginQuery,
   useGetDefaultFiatCurrencyQuery, //
 } from '../../../common/slices/api.slice'
 
@@ -113,9 +112,6 @@ export function ConfirmSendTransaction() {
 
   // Queries
   const { data: defaultFiatCurrency } = useGetDefaultFiatCurrencyQuery()
-  const { data: activeOrigin = { eTldPlusOne: '', originSpec: '' } } =
-    useGetActiveOriginQuery()
-  const originInfo = selectedPendingTransaction?.originInfo ?? activeOrigin
 
   // Memos
   const totalAmount = React.useMemo(() => {
@@ -160,15 +156,16 @@ export function ConfirmSendTransaction() {
     gasFee,
   ])
 
-  const isBraveWalletOrigin = React.useMemo(() => {
-    return originInfo.originSpec === 'chrome://wallet'
-  }, [originInfo])
-
   const memoText = getTransactionMemo(selectedPendingTransaction)
 
   if (!selectedPendingTransaction || !transactionDetails) {
     return <LoadingPanel />
   }
+
+  const originInfo = selectedPendingTransaction.originInfo
+  const isBraveWalletOrigin = React.useMemo(() => {
+    return originInfo?.originSpec === 'chrome://wallet'
+  }, [originInfo])
 
   return (
     <>
