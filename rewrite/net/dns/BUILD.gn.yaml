@@ -21,3 +21,9 @@ substitutions:
       target: tests
       list_name: sources
       literal: brave_net_dns_unit_test_sources
+
+  - description: Add the Brave DNS unit test deps.
+    add_literal_to_list:
+      target: tests
+      list_name: deps
+      literal: brave_net_dns_deps

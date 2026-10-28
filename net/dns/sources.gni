@@ -3,8 +3,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at https://mozilla.org/MPL/2.0/.
 
-import("//brave/components/tor/buildflags/buildflags.gni")
-
 brave_net_dns_sources = [
   "//brave/net/dns/onion_hostname_resolution.cc",
   "//brave/net/dns/onion_hostname_resolution.h",
@@ -15,8 +13,5 @@ brave_net_dns_sources = [
 
 brave_net_dns_deps = [ "//brave/components/tor/buildflags" ]
 
-brave_net_dns_unit_test_sources = []
-if (enable_tor) {
-  brave_net_dns_unit_test_sources +=
-      [ "//brave/net/dns/onion_hostname_resolution_unittest.cc" ]
-}
+brave_net_dns_unit_test_sources =
+    [ "//brave/net/dns/onion_hostname_resolution_unittest.cc" ]

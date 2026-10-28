@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/test/task_environment.h"
+#include "brave/components/tor/buildflags/buildflags.h"
 #include "net/base/address_family.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
@@ -87,6 +88,8 @@ class OnionHostnameResolutionTest : public testing::Test {
   ScopedDefaultHostResolverProc scoped_host_resolver_proc_;
   std::unique_ptr<URLRequestContext> context_;
 };
+
+#if BUILDFLAG(ENABLE_TOR)
 
 TEST_F(OnionHostnameResolutionTest, BlocksByDefault) {
   EXPECT_EQ(URLRequestContext::TorMode::kDisabled, context_->tor_mode());
@@ -459,5 +462,18 @@ TEST_F(OnionHostnameResolutionDispatcherTest, StopsDnsTaskWaitingForSlot) {
       dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::AAAA));
   ExpectDispatcherHasFreeSlots();
 }
+
+#else  // BUILDFLAG(ENABLE_TOR)
+
+// Builds without Tor never block .onion, even in a context left at the default
+// kDisabled.
+TEST_F(OnionHostnameResolutionTest, ResolvesOnionWithoutTor) {
+  EXPECT_EQ(URLRequestContext::TorMode::kDisabled, context_->tor_mode());
+
+  EXPECT_EQ(OK, Resolve("example.onion"));
+  EXPECT_EQ(1u, NumSystemResolves());
+}
+
+#endif  // BUILDFLAG(ENABLE_TOR)
 
 }  // namespace net
