@@ -5,14 +5,28 @@
 
 substitutions:
   - description: |-
-      Declare the Brave hook that keeps blocked .onion lookups local.
+      Declare the Brave hooks that keep blocked .onion lookups local.
 
-      The hook is defined in the chromium_src override of
+      The hooks are defined in the chromium_src override of
       host_resolver_manager_job.cc.
     add_to_protected:
       class_name: HostResolverManager::Job
       code: |-
-        // If .onion resolution is blocked for this job, drops the tasks that
-        // would send the hostname to the system resolver or DoH. Returns true
-        // if it completed the job from the hosts file instead.
+        // Called at the top of RunNextTask(). If .onion resolution is blocked
+        // for this job, drops the tasks that would send the hostname to the
+        // system resolver or DoH. Returns true if it completed the job from
+        // the hosts file instead.
         bool MaybeDropBlockedOnionTasks();
+        // Called at the top of Start(). If .onion resolution is blocked for
+        // this job, takes the dispatcher slot, stops any DNS task, drops the
+        // network tasks and finishes the job asynchronously, since Start()
+        // must not complete synchronously. Returns true if it did.
+        bool MaybeDeferBlockedOnionJob();
+        void ResumeBlockedOnionJob(bool dropped_system_task);
+        // Drops the tasks that leave the machine; returns whether one of them
+        // was the system resolver.
+        bool DropOnionNetworkTasks();
+        // Completes the job from the hosts file if `dropped_system_task`, since
+        // the hosts file is otherwise left to getaddrinfo(). Returns true if it
+        // did.
+        bool MaybeServeBlockedOnionJobFromHosts(bool dropped_system_task);

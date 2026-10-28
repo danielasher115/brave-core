@@ -1,16 +1,30 @@
 diff --git a/net/dns/host_resolver_manager_job.h b/net/dns/host_resolver_manager_job.h
-index 3ecc432d30a1d72ce3a4dc92616c9d6b292af56c..68f42524927a08a99239305d78c0a09c6490cd5a 100644
+index 3ecc432d30a1d72ce3a4dc92616c9d6b292af56c..3603bd121d6a06ad2b3bec3e7f881f4d25464131 100644
 --- a/net/dns/host_resolver_manager_job.h
 +++ b/net/dns/host_resolver_manager_job.h
-@@ -214,6 +214,12 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
+@@ -214,6 +214,26 @@ class HostResolverManager::Job : public PrioritizedDispatcher::Job,
      return dns_task_results_manager_.get();
    }
  
 + protected:
-+  // If .onion resolution is blocked for this job, drops the tasks that
-+  // would send the hostname to the system resolver or DoH. Returns true
-+  // if it completed the job from the hosts file instead.
++  // Called at the top of RunNextTask(). If .onion resolution is blocked
++  // for this job, drops the tasks that would send the hostname to the
++  // system resolver or DoH. Returns true if it completed the job from
++  // the hosts file instead.
 +  bool MaybeDropBlockedOnionTasks();
++  // Called at the top of Start(). If .onion resolution is blocked for
++  // this job, takes the dispatcher slot, stops any DNS task, drops the
++  // network tasks and finishes the job asynchronously, since Start()
++  // must not complete synchronously. Returns true if it did.
++  bool MaybeDeferBlockedOnionJob();
++  void ResumeBlockedOnionJob(bool dropped_system_task);
++  // Drops the tasks that leave the machine; returns whether one of them
++  // was the system resolver.
++  bool DropOnionNetworkTasks();
++  // Completes the job from the hosts file if `dropped_system_task`, since
++  // the hosts file is otherwise left to getaddrinfo(). Returns true if it
++  // did.
++  bool MaybeServeBlockedOnionJobFromHosts(bool dropped_system_task);
 +
   private:
    // Explains why a Job didn't attempt HTTPS query.

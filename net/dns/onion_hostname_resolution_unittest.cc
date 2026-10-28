@@ -153,8 +153,8 @@ class OnionHostnameResolutionDnsClientTest : public testing::Test {
     host_resolver_proc_->AddRule("*", "127.0.0.1");
 
     std::unique_ptr<ContextHostResolver> host_resolver =
-        HostResolver::CreateStandaloneContextResolver(
-            /*net_log=*/nullptr, HostResolver::ManagerOptions());
+        HostResolver::CreateStandaloneContextResolver(/*net_log=*/nullptr,
+                                                      manager_options_);
     host_resolver->SetHostResolverSystemParamsForTest(
         HostResolverSystemTask::Params(host_resolver_proc_,
                                        /*max_retry_attempts=*/0));
@@ -197,9 +197,10 @@ class OnionHostnameResolutionDnsClientTest : public testing::Test {
 
   std::unique_ptr<HostResolver::ResolveHostRequest> CreateRequest(
       url::SchemeHostPort host,
-      SecureDnsPolicy secure_dns_policy = SecureDnsPolicy::kAllow) {
+      SecureDnsPolicy secure_dns_policy = SecureDnsPolicy::kAllow,
+      DnsQueryType dns_query_type = DnsQueryType::A) {
     HostResolver::ResolveHostParameters parameters;
-    parameters.dns_query_type = DnsQueryType::A;
+    parameters.dns_query_type = dns_query_type;
     parameters.secure_dns_policy = secure_dns_policy;
     return context_->host_resolver()->CreateRequest(
         std::move(host), NetworkAnonymizationKey(),
@@ -207,8 +208,10 @@ class OnionHostnameResolutionDnsClientTest : public testing::Test {
   }
 
   std::unique_ptr<HostResolver::ResolveHostRequest> CreateRequest(
-      std::string_view host) {
-    return CreateRequest(url::SchemeHostPort(url::kHttpsScheme, host, 443));
+      std::string_view host,
+      DnsQueryType dns_query_type = DnsQueryType::A) {
+    return CreateRequest(url::SchemeHostPort(url::kHttpsScheme, host, 443),
+                         SecureDnsPolicy::kAllow, dns_query_type);
   }
 
   size_t NumSystemResolves() {
@@ -218,6 +221,7 @@ class OnionHostnameResolutionDnsClientTest : public testing::Test {
  protected:
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::IO};
+  HostResolver::ManagerOptions manager_options_;
   scoped_refptr<RuleBasedHostResolverProc> host_resolver_proc_;
   std::unique_ptr<URLRequestContext> context_;
   raw_ptr<ContextHostResolver> host_resolver_ = nullptr;
@@ -327,6 +331,133 @@ TEST_F(OnionHostnameResolutionDnsClientTest, ServesHostsFileWhenBlocked) {
   EXPECT_EQ(IPAddress(10, 0, 0, 1),
             request->GetAddressResults().front().address());
   EXPECT_EQ(0u, NumSystemResolves());
+}
+
+// Limits the resolver to two concurrent jobs, so a job can wait for a
+// dispatcher slot.
+class OnionHostnameResolutionDispatcherTest
+    : public OnionHostnameResolutionDnsClientTest {
+ public:
+  OnionHostnameResolutionDispatcherTest() {
+    manager_options_.max_concurrent_resolves = 2;
+  }
+
+  void SetUp() override {
+    OnionHostnameResolutionDnsClientTest::SetUp();
+    host_resolver_->GetManagerForTesting()->SetLastIPv6ProbeResultForTesting(
+        true);
+  }
+
+  // Delays AAAA lookups of busy.test and A lookups of busy2.test. .onion
+  // lookups that reach DNS are delayed when `delay_onion` is set and fail the
+  // test otherwise.
+  MockDnsClientRuleList Rules(bool delay_onion) {
+    MockDnsClientRuleList rules;
+    rules.emplace_back(
+        "busy.test", dns_protocol::kTypeAAAA, /*secure=*/false,
+        MockDnsClientRule::Result(MockDnsClientRule::ResultType::kOk),
+        /*delay=*/true);
+    rules.emplace_back(
+        "busy2.test", dns_protocol::kTypeA, /*secure=*/false,
+        MockDnsClientRule::Result(MockDnsClientRule::ResultType::kOk),
+        /*delay=*/true);
+    for (uint16_t qtype : {dns_protocol::kTypeA, dns_protocol::kTypeAAAA}) {
+      rules.emplace_back(
+          "example.onion", qtype, /*secure=*/false,
+          MockDnsClientRule::Result(
+              delay_onion ? MockDnsClientRule::ResultType::kOk
+                          : MockDnsClientRule::ResultType::kUnexpected),
+          /*delay=*/delay_onion);
+    }
+    return rules;
+  }
+
+  // Expects both dispatcher slots to be free: lookups of busy.test (AAAA) and
+  // busy2.test (A) must both get a slot and start their DNS transaction.
+  void ExpectDispatcherHasFreeSlots() {
+    std::unique_ptr<HostResolver::ResolveHostRequest> first =
+        CreateRequest(url::SchemeHostPort(url::kHttpsScheme, "busy.test", 9443),
+                      SecureDnsPolicy::kAllow, DnsQueryType::AAAA);
+    TestCompletionCallback first_callback;
+    ASSERT_EQ(ERR_IO_PENDING, first->Start(first_callback.callback()));
+    std::unique_ptr<HostResolver::ResolveHostRequest> second =
+        CreateRequest("busy2.test");
+    TestCompletionCallback second_callback;
+    ASSERT_EQ(ERR_IO_PENDING, second->Start(second_callback.callback()));
+
+    // Fails if `second` is still waiting for a slot.
+    ASSERT_TRUE(
+        dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::A));
+    ASSERT_TRUE(
+        dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::AAAA));
+    EXPECT_EQ(OK, first_callback.WaitForResult());
+    EXPECT_EQ(OK, second_callback.WaitForResult());
+  }
+};
+
+// A job that starts blocking .onion while it waits for a dispatcher slot fails
+// once it gets one, and gives the slot back.
+TEST_F(OnionHostnameResolutionDispatcherTest, FailsQueuedJob) {
+  SetUpDnsClient(SecureDnsMode::kOff, Rules(/*delay_onion=*/false),
+                 /*insecure_dns=*/true);
+  context_->set_tor_mode(URLRequestContext::TorMode::kPassthrough);
+
+  // Fill both slots.
+  std::unique_ptr<HostResolver::ResolveHostRequest> busy1 =
+      CreateRequest("busy.test", DnsQueryType::AAAA);
+  TestCompletionCallback busy1_callback;
+  ASSERT_EQ(ERR_IO_PENDING, busy1->Start(busy1_callback.callback()));
+  std::unique_ptr<HostResolver::ResolveHostRequest> busy2 =
+      CreateRequest(url::SchemeHostPort(url::kHttpsScheme, "busy.test", 8443),
+                    SecureDnsPolicy::kAllow, DnsQueryType::AAAA);
+  TestCompletionCallback busy2_callback;
+  ASSERT_EQ(ERR_IO_PENDING, busy2->Start(busy2_callback.callback()));
+
+  std::unique_ptr<HostResolver::ResolveHostRequest> request =
+      CreateRequest("example.onion");
+  TestCompletionCallback callback;
+  ASSERT_EQ(ERR_IO_PENDING, request->Start(callback.callback()));
+
+  context_->set_tor_mode(URLRequestContext::TorMode::kDisabled);
+  dns_client_->CompleteDelayedTransactions();
+  EXPECT_EQ(OK, busy1_callback.WaitForResult());
+
+  EXPECT_EQ(ERR_NAME_NOT_RESOLVED, callback.WaitForResult());
+  EXPECT_EQ(0u, NumSystemResolves());
+  ExpectDispatcherHasFreeSlots();
+}
+
+// A running DNS task whose next transaction waits for a dispatcher slot stops
+// once blocking starts, instead of sending that transaction.
+TEST_F(OnionHostnameResolutionDispatcherTest, StopsDnsTaskWaitingForSlot) {
+  SetUpDnsClient(SecureDnsMode::kOff, Rules(/*delay_onion=*/true),
+                 /*insecure_dns=*/true);
+  context_->set_tor_mode(URLRequestContext::TorMode::kPassthrough);
+
+  // Take one slot, so the .onion A and AAAA transactions cannot both run.
+  std::unique_ptr<HostResolver::ResolveHostRequest> busy =
+      CreateRequest("busy.test", DnsQueryType::AAAA);
+  TestCompletionCallback busy_callback;
+  ASSERT_EQ(ERR_IO_PENDING, busy->Start(busy_callback.callback()));
+
+  std::unique_ptr<HostResolver::ResolveHostRequest> request =
+      CreateRequest("example.onion", DnsQueryType::UNSPECIFIED);
+  TestCompletionCallback callback;
+  ASSERT_EQ(ERR_IO_PENDING, request->Start(callback.callback()));
+
+  context_->set_tor_mode(URLRequestContext::TorMode::kDisabled);
+  ASSERT_TRUE(
+      dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::AAAA));
+  EXPECT_EQ(OK, busy_callback.WaitForResult());
+
+  EXPECT_EQ(ERR_NAME_NOT_RESOLVED, callback.WaitForResult());
+  EXPECT_EQ(0u, NumSystemResolves());
+  // The transaction in flight was cancelled and the waiting one never started.
+  EXPECT_FALSE(
+      dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::A));
+  EXPECT_FALSE(
+      dns_client_->CompleteOneDelayedTransactionOfType(DnsQueryType::AAAA));
+  ExpectDispatcherHasFreeSlots();
 }
 
 }  // namespace net

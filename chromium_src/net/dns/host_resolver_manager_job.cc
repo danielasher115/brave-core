@@ -3,6 +3,9 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this file,
  * You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+#include "base/functional/bind.h"
+#include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "brave/net/dns/onion_hostname_resolution.h"
 #include "brave/net/dns/secure_dns_counter.h"
 
@@ -18,25 +21,57 @@
 
 namespace net {
 
-// Declared by the plaster in host_resolver_manager_job.h and called at the top
-// of RunNextTask(), so a job whose context starts blocking .onion after it was
-// created, or a bootstrap follow-up, cannot reach the system resolver or DoH.
 bool HostResolverManager::Job::MaybeDropBlockedOnionTasks() {
   if (!IsOnionHostnameResolutionBlocked(key_.resolve_context.get(),
                                         key_.host.GetHostname())) {
     return false;
   }
+  return MaybeServeBlockedOnionJobFromHosts(DropOnionNetworkTasks());
+}
 
-  // Keep the cache lookups, which never leave the machine.
-  const bool dropped_system_task =
-      std::ranges::contains(tasks_, TaskType::SYSTEM);
-  std::erase_if(tasks_, [](TaskType task) { return !IsLocalTask(task); });
-  if (!dropped_system_task || !resolver_) {
+bool HostResolverManager::Job::MaybeDeferBlockedOnionJob() {
+  // Only the first slot of a job and the extra slots of a running DNS task
+  // start work; leave any other grant to Start().
+  if ((num_occupied_job_slots_ != 0 && !dns_task_) ||
+      !IsOnionHostnameResolutionBlocked(key_.resolve_context.get(),
+                                        key_.host.GetHostname())) {
     return false;
   }
 
-  // ResolveLocally() skips the hosts file when the system resolver runs next,
-  // since getaddrinfo() reads it. Read it here instead.
+  // Take the slot as Start() would, then hand any extra slots back by stopping
+  // the DNS task. Marking the job as running makes Finish() release the
+  // remaining slot.
+  handle_.Reset();
+  ++num_occupied_job_slots_;
+  KillDnsTask();
+  job_running_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&Job::ResumeBlockedOnionJob,
+                     weak_ptr_factory_.GetWeakPtr(), DropOnionNetworkTasks()));
+  return true;
+}
+
+void HostResolverManager::Job::ResumeBlockedOnionJob(bool dropped_system_task) {
+  if (MaybeServeBlockedOnionJobFromHosts(dropped_system_task)) {
+    return;
+  }
+  // Runs the remaining cache lookups, or fails the job.
+  RunNextTask();
+}
+
+bool HostResolverManager::Job::DropOnionNetworkTasks() {
+  const bool dropped_system_task =
+      std::ranges::contains(tasks_, TaskType::SYSTEM);
+  std::erase_if(tasks_, [](TaskType task) { return !IsLocalTask(task); });
+  return dropped_system_task;
+}
+
+bool HostResolverManager::Job::MaybeServeBlockedOnionJobFromHosts(
+    bool dropped_system_task) {
+  if (!dropped_system_task || !resolver_) {
+    return false;
+  }
   std::set<std::unique_ptr<HostResolverInternalResult>> results =
       resolver_->ServeFromHosts(
           key_.host.GetHostname(), key_.query_types,
